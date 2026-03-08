@@ -147,7 +147,18 @@ def _predict_single(req: PredictRequest) -> PredictResponse:
 
     # Compute efficiency score
     failure_prob = probabilities.get('machine_failure', 0.0)
-    efficiency_score = max(0.0, min(1.0, 1.0 - failure_prob))
+    
+    # If parameters are pushed to dangerous extremes, multiple failure probabilities spike.
+    # We penalize efficiency heavily if aggregate failure probabilities are high.
+    aggregate_risk = sum(v for k, v in probabilities.items() if k != 'machine_failure')
+    
+    # Base efficiency starts from 1.0, reduces based on machine failure and aggregate risk.
+    # The higher the aggregate risk (e.g., from pushing RPM/Torque), the lower the efficiency.
+    efficiency_penalty = failure_prob + (aggregate_risk * 0.3)
+    
+    # Floor at 0.05 so it never completely zeros out purely from equations, 
+    # but represents a near-total loss of useful work.
+    efficiency_score = max(0.05, min(1.0, 1.0 - efficiency_penalty))
 
     return PredictResponse(
         asset_id=req.asset_id,

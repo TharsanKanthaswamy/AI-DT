@@ -233,12 +233,20 @@ async function predictForAsset(state) {
  * - FAILURE warning active:  × 0.40 (near-failure = emergency slow mode)
  * - Tool wear >180min:       × 0.82 (severely worn tool)
  * - Tool wear >220min:       × 0.60 (tool about to fail)
+ * - Dangerous RPM (>2000):   × 0.10 (jamming/breaking components)
+ * - Dangerous Torque (>65):  × 0.10 (motor stalling)
  */
 function computeUPH(state) {
     const baseUPH = (state.rpm / 100) * 60;
 
     let modifier = state.efficiency_score ?? 1.0;
 
+    // Hard penalties for dangerously high parameters
+    if (state.rpm > 2000) modifier *= 0.10; // Jamming
+    if (state.torque > 65) modifier *= 0.10; // Motor stalling
+    if (state.process_temp > 315) modifier *= 0.20; // Material melting/ruined parts
+
+    // Normal strain penalties
     if (state.torque > 60) modifier *= 0.85;
     if (state.air_temp > 310) modifier *= 0.90;
     if (state.tool_wear > 180) modifier *= 0.82;
@@ -364,8 +372,9 @@ const RECOVERY_RULES = [
         probKey: 'twf',
         triggerThreshold: 0.70,
         type: 'TWF',
-        description: 'Feed rate reduced to limit tool wear progression',
+        description: 'Automated tool replacement initiated. Tool wear reset.',
         action: (state) => ({
+            tool_wear: 0,
             rpm: Math.max(state.rpm * 0.90, 800),
             torque: Math.max(state.torque * 0.90, 15),
             // air_temp NOT touched
@@ -699,12 +708,14 @@ async function handleParameterUpdate(assetId, params) {
 // ── Tool Wear Auto-Increment ────────────────────────────────
 setInterval(async () => {
     for (const [assetId, state] of assetStates) {
+        // Increment wear and recompute energy
         state.tool_wear += 0.5 + Math.random() * 1.5;
         state.energy_kwh = state.isProcessRunning
             ? state.rpm * state.torque * 0.0001
             : 0;
 
         const prediction = await predictForAsset(state);
+
         if (prediction) {
             state.probabilities = prediction.probabilities;
             state.efficiency_score = prediction.efficiency_score;
@@ -713,6 +724,7 @@ setInterval(async () => {
                 const recoveryFired = await applyRecoveryActions(
                     state, prediction.probabilities
                 );
+
                 if (recoveryFired) {
                     const recheck = await predictForAsset(state);
                     if (recheck) {
@@ -730,7 +742,7 @@ setInterval(async () => {
             evaluateWarnings(state, state.probabilities);
         }
 
-        // Compute UPH and increment output
+        // Compute UPH and increment output AFTER all ML and recovery checks
         state.uph = computeUPH(state);
         state.output_units += Math.floor(state.uph / 360);
 

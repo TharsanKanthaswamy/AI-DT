@@ -55,7 +55,7 @@ CRITICAL CONSTRAINT:
 You must NEVER modify air_temp in your parameter_changes.
 air_temp is an ambient environmental parameter — no machine actuator
 can control the surrounding factory air temperature.
-Only modify: process_temp, rpm, torque (these are actuator-controlled).
+Only modify: process_temp, rpm, torque, tool_wear (reset tool_wear to 0 if the tool needs replacing).
 
 Respond ONLY with this exact JSON structure, no other text:
 {
@@ -66,7 +66,8 @@ Respond ONLY with this exact JSON structure, no other text:
   "parameter_changes": {
     "process_temp": 309.0,
     "rpm": 1200,
-    "torque": 38.0
+    "torque": 38.0,
+    "tool_wear": 0
   },
   "estimated_recovery_time_seconds": 45
 }

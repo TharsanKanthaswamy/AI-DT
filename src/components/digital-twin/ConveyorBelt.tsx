@@ -19,7 +19,18 @@ interface ConveyorBeltProps {
 
 const SEGMENT_COUNT = 8;
 
-function getHealthColor(efficiency: number | null | undefined): string {
+function getHealthColor(state: AssetState | undefined): string {
+    if (!state) return '#ef4444';
+
+    // Check for explicit warnings first
+    const hasCriticalWarning = state.activeWarnings?.some(w => w.severity === 'critical') ?? false;
+    const hasWarning = state.activeWarnings?.some(w => w.severity === 'warning') ?? false;
+
+    if (hasCriticalWarning) return '#ef4444'; // Red for critical
+    if (hasWarning) return '#eab308'; // Yellow for warnings
+
+    // Fallback to efficiency score
+    const efficiency = state.efficiency_score;
     if (efficiency === null || efficiency === undefined) return '#ef4444';
     if (efficiency > 0.7) return '#22c55e';
     if (efficiency > 0.4) return '#eab308';
@@ -43,7 +54,7 @@ const ConveyorBelt: React.FC<ConveyorBeltProps> = ({
         return asset?.label ?? assetId;
     }, [assetId]);
 
-    const healthColor = getHealthColor(assetState?.efficiency_score);
+    const healthColor = getHealthColor(assetState);
 
     useFrame((_, delta) => {
         if (!isRunning) return;
