@@ -1,0 +1,79 @@
+# ══════════════════════════════════════════════════════════════
+# Industry 4.0 Digital Twin — Docker Compose
+# ══════════════════════════════════════════════════════════════
+# Services:
+#   - digital-twin     (Next.js) → port 3000
+#   - control-panel    (Next.js) → port 3001
+#   - ws-server        (Node.js) → port 3002
+#   - ml-inference     (Python)  → port 3003
+# ══════════════════════════════════════════════════════════════
+
+services:
+  # ── ML Inference Server ──────────────────────────────────
+  ml-inference:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    container_name: dt-ml-inference
+    ports:
+      - "3003:3003"
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3003/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── WebSocket + Log Server ─────────────────────────────
+  ws-server:
+    build:
+      context: ./ws-server
+      dockerfile: Dockerfile
+    container_name: dt-ws-server
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - ML_SERVER_URL=http://ml-inference:3003
+      - DB_PATH=/app/data/logs.db
+    volumes:
+      - ws-data:/app/data
+    depends_on:
+      ml-inference:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Digital Twin Frontend ──────────────────────────────
+  digital-twin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_WS_URL=ws://localhost:3002
+        - NEXT_PUBLIC_API_URL=http://localhost:3002
+    container_name: dt-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - ws-server
+    restart: unless-stopped
+
+  # ── Control Panel Frontend ─────────────────────────────
+  control-panel:
+    build:
+      context: ./control-panel
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_WS_URL=ws://localhost:3002
+        - NEXT_PUBLIC_API_URL=http://localhost:3002
+    container_name: dt-control-panel
+    ports:
+      - "3001:3001"
+    depends_on:
+      - ws-server
+    restart: unless-stopped
+
+volumes:
+  ws-data:
+    driver: local

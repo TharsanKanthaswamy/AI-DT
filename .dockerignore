@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+.env*
+control-panel
+ws-server
+ml
+Dockerfile
+docker-compose.yml
+.dockerignore
